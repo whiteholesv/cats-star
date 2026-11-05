@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>우주고양아</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #1b1530;
+    background-image:
+      radial-gradient(#ffffff55 1px, transparent 1px),
+      radial-gradient(#9fa8ff44 1px, transparent 1px);
+    background-size: 40px 40px, 70px 70px;
+    background-position: 0 0, 20px 30px;
+    color: #fff;
+    font-family: "Courier New", monospace;
+  }
+
+  /* 전체 배치: 왼쪽 게임 화면 + 오른쪽 스코어보드 */
+  .game {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 1100px;
+    align-items: flex-start;
+  }
+
+  .screen {
+    flex: 1;
+    position: relative;
+    border: 4px solid #000;
+    box-shadow: 0 0 0 4px #6b5bd6, 8px 8px 0 4px #000;
+    background: #000;
+  }
+  #scene {
+    display: block;
+    width: 100%;
+    image-rendering: pixelated;   /* 도트가 흐려지지 않게 */
+  }
+
+  /* 오른쪽 스코어보드 */
+  .board {
+    width: 290px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    background: #2a2150;
+    border: 4px solid #000;
+    box-shadow: 0 0 0 4px #6b5bd6, 8px 8px 0 4px #000;
+  }
+  .board h1 {
+    margin: 0;
+    font-size: 26px;
+    text-align: center;
+    color: #ffe066;
+    text-shadow: 3px 3px 0 #000;
+    letter-spacing: 2px;
+  }
+  .panel {
+    background: #1e1740;
+    border: 3px solid #000;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .label {
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+    font-size: 16px;
+    color: #ffcf4a;
+  }
+  .label span { color: #fff; }
+  .small { font-size: 13px; color: #c9c0ff; }
+  .mood { font-size: 15px; font-weight: bold; }
+
+  .bar { display: flex; gap: 3px; }
+  .seg {
+    flex: 1;
+    height: 18px;
+    background: #3a305e;
+    border: 2px solid #000;
+  }
+  .seg.on { background: var(--barColor, #ff7eb3); }
+
+  .slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .slots canvas {
+    width: 100%;
+    image-rendering: pixelated;
+    background: #2a2150;
+    border: 2px solid #000;
+    padding: 3px;
+  }
+  .slots canvas.pop { animation: pop .4s; }
+  @keyframes pop { 50% { transform: scale(1.35); } }
+
+  .prog { height: 10px; background: #3a305e; border: 2px solid #000; }
+  .prog i { display: block; height: 100%; width: 0; background: #7ec8ff; }
+
+  .score {
+    font-size: 34px;
+    font-weight: bold;
+    text-align: center;
+    color: #ffe066;
+    text-shadow: 3px 3px 0 #000;
+  }
+  .score-panel .small { text-align: center; }
+
+  .stats div { display: flex; justify-content: space-between; font-size: 15px; }
+  .stats b { color: #ffe066; }
+
+  /* 도트 느낌 버튼 */
+  .btn {
+    font: inherit;
+    font-size: 19px;
+    font-weight: bold;
+    padding: 12px;
+    background: #ffcf4a;
+    color: #2b2040;
+    border: 3px solid #000;
+    box-shadow: 0 5px 0 #000;
+    cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { background: #ffe066; }
+  .btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 #000; }
+  .btn:disabled { background: #5b5378; color: #2b2040; cursor: not-allowed; }
+
+  .btn-sub { background: #9fa8ff; font-size: 16px; padding: 9px; }
+  .btn-sub:hover:not(:disabled) { background: #bfc5ff; }
+
+  /* 일시정지 화면 */
+  .pause-cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 10, 38, 0.6);
+    color: #fff;
+    font-size: clamp(24px, 5vw, 48px);
+    font-weight: bold;
+    text-shadow: 4px 4px 0 #000;
+  }
+
+  /* 고양이 말풍선 */
+  .bubble {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    background: #fff;
+    color: #2b2040;
+    border: 3px solid #000;
+    padding: 4px 10px;
+    font-weight: bold;
+    font-size: clamp(11px, 1.6vw, 16px);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -9px;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: #000;
+  }
+
+  /* +10 같은 떠오르는 글자 */
+  .float {
+    position: absolute;
+    transform: translate(-50%, 0);
+    font-weight: bold;
+    font-size: clamp(16px, 2.4vw, 26px);
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+    animation: floatUp 1.3s forwards;
+  }
+  @keyframes floatUp {
+    to { transform: translate(-50%, -50px); opacity: 0; }
+  }
+
+  /* 시작 화면 */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(13, 10, 38, 0.85);
+    z-index: 10;
+  }
+  .card {
+    background: #2a2150;
+    border: 4px solid #000;
+    box-shadow: 0 0 0 4px #6b5bd6, 10px 10px 0 4px #000;
+    padding: 28px 32px;
+    text-align: center;
+    max-width: 420px;
+  }
+  .card canvas { width: 144px; image-rendering: pixelated; }
+  .card h2 {
+    margin: 10px 0 6px;
+    font-size: 40px;
+    color: #ffe066;
+    text-shadow: 4px 4px 0 #000;
+  }
+  .card p { margin: 0 0 14px; color: #c9c0ff; }
+  .card ul {
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.7;
+    margin: 0 0 20px;
+    padding-left: 20px;
+  }
+  .card .btn { width: 100%; font-size: 22px; }
+
+  @media (max-width: 760px) {
+    .game { flex-direction: column; align-items: stretch; }
+    .board { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="game">
+  <!-- 왼쪽: 게임 화면 -->
+  <div class="screen" id="screen">
+    <canvas id="scene"></canvas>
+    <div class="bubble" id="bubble" hidden></div>
+    <div class="pause-cover" id="pauseCover" hidden>⏸ 일시정지</div>
+  </div>
+
+  <!-- 오른쪽: 스코어보드 -->
+  <aside class="board">
+    <h1>🪐 우주고양아</h1>
+
+    <section class="panel score-panel">
+      <div class="label">⭐ 점수</div>
+      <div class="score" id="score">0</div>
+      <div class="small" id="scoreRate"></div>
+      <div class="small" id="poopInfo"></div>
+    </section>
+
+    <section class="panel">
+      <div class="label">💗 행복도 <span id="happyNum">50 / 100</span></div>
+      <div class="bar" id="happyBar"></div>
+      <div class="mood" id="mood"></div>
+      <div class="small" id="hungerInfo"></div>
+    </section>
+
+    <section class="panel">
+      <div class="label">🐟 생선 <span id="fishNum">0 / 6</span></div>
+      <div class="slots" id="slots"></div>
+      <div class="prog"><i id="fishProg"></i></div>
+      <div class="small" id="fishInfo"></div>
+    </section>
+
+    <button class="btn" id="feedBtn" disabled>🐟 생선 주기</button>
+    <button class="btn btn-sub" id="pauseBtn" disabled>⏸ 일시정지</button>
+
+    <section class="panel stats">
+      <div>먹이 준 횟수 <b id="fedCount">0</b></div>
+      <div>함께한 시간 <b id="playTime">00:00</b></div>
+    </section>
+  </aside>
+</div>
+
+<!-- 시작 화면 -->
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <canvas id="startCat" width="24" height="22"></canvas>
+    <h2>우주고양아</h2>
+    <p>우주에서 온 고양이를 돌봐주세요!</p>
+    <ul>
+      <li>10초마다 생선이 1개씩 생겨요 (최대 6개)</li>
+      <li>생선을 주면 행복도가 10 올라요</li>
+      <li>1분 동안 안 주면 행복도가 10 내려가요</li>
+      <li>⭐ 1초마다 행복도 10당 1점씩 올라요</li>
+      <li>💩 똥이 있으면 1초에 개당 3점씩 깎여요 (클릭해서 치우기!)</li>
+      <li>🐱 고양이를 클릭하면 말을 걸어요</li>
+    </ul>
+    <button class="btn" id="startBtn">게임 시작</button>
+  </div>
+</div>
+
+<script>
+// =====================================================
+//  1. 기본 설정
+// =====================================================
+const W = 192, H = 144;          // 게임 화면 크기 (도트 개수)
+const MAX_FISH = 6;              // 생선 최대 개수
+const FISH_TIME = 10;            // 생선 1개 생기는 시간(초)
+const HUNGER_TIME = 60;          // 행복도 줄어드는 시간(초)
+const FLOOR = 126;               // 고양이가 서 있는 바닥 높이
+
+const canvas = document.getElementById('scene');
+canvas.width = W;
+canvas.height = H;
+const ctx = canvas.getContext('2d');
+
+// 도트 그림에 쓰는 색깔표
+const PAL = {
+  k: '#2b2040',  // 테두리
+  w: '#d8ccff',  // 고양이 몸 (연보라)
+  d: '#b3a3f0',  // 고양이 배
+  p: '#ff9ec7',  // 분홍 (귀, 볼)
+  y: '#ffe066',  // 이마의 별
+  b: '#7ec8ff',  // 생선
+  r: '#ff5c8a',  // 하트
+};
+
+// 네모 하나 칠하기
+function R(g, x, y, w, h, color) {
+  g.fillStyle = color;
+  g.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+// 글자 그림(스프라이트)을 도트로 그리기
+function drawSprite(g, sprite, x, y, pal = PAL) {
+  for (let j = 0; j < sprite.length; j++) {
+    for (let i = 0; i < sprite[j].length; i++) {
+      const c = sprite[j][i];
+      if (c === '.') continue;
+      R(g, x + i, y + j, 1, 1, pal[c]);
+    }
+  }
+}
+
+// =====================================================
+//  2. 도트 그림들
+// =====================================================
+const CAT = [
+  "..kk......kk..",
+  ".kpwk....kwpk.",
+  ".kppwkkkkwppk.",
+  "kwwwwwyywwwwwk",
+  "kwwwwwwwwwwwwk",
+  "kwwwwwwwwwwwwk",
+  "kwwwwwwwwwwwwk",
+  "kwpwwwwwwwwpwk",
+  ".kwwwwwwwwwwk.",
+  "..kkkkkkkkkk..",
+  "..kwwwwwwwwk..",
+  ".kwwwwwwwwwwk.",
+  ".kwwwddddwwwk.",
+  ".kwwddddddwwk.",
+  ".kwwddddddwwk.",
+  ".kwkwwwwwwkwk.",
+  "..kkkkkkkkkk..",
+];
+
+const FISH = [
+  "..kkkk.kk",
+  ".kbbbbkbk",
+  "kbkbbbbbk",
+  ".kbbbbkbk",
+  "..kkkk.kk",
+];
+
+const POOP = [
+  "...kk...",
+  "..kook..",
+  "..kOOk..",
+  ".kooook.",
+  ".kOOOOk.",
+  "koWooWok",
+  "kkkkkkkk",
+];
+const POOP_PAL = { k: '#3b2410', o: '#a0683a', O: '#7a4a24', W: '#ffffff' };
+
+const HEART = [
+  ".rr.rr.",
+  "rrrrrrr",
+  ".rrrrr.",
+  "..rrr..",
+  "...r...",
+];
+
+// =====================================================
+//  3. 집 배경 (처음에 한 번만 그려둠)
+// =====================================================
+const WIN = { x: 46, y: 44, r: 24 };   // 동그란 우주 창문
+const PLANET = { x: 54, y: 36, r: 6 };
+const stars = [];
+
+function makeBackground() {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+
+  // 벽지
+  R(g, 0, 0, W, 104, '#f6dfbd');
+  for (let y = 4; y < 98; y += 8)
+    for (let x = (y / 4) % 4 === 1 ? 0 : 4; x < W; x += 8)
+      R(g, x, y, 1, 1, '#e6c393');
+  R(g, 0, 0, W, 3, '#e0bb8a');
+
+  // 걸레받이
+  R(g, 0, 98, W, 6, '#9c6234');
+  R(g, 0, 98, W, 1, '#7a4a24');
+
+  // 나무 바닥
+  R(g, 0, 104, W, 40, '#c98a52');
+  for (let y = 104; y < H; y += 8) {
+    R(g, 0, y, W, 1, '#a86d3a');
+    const off = ((y - 104) / 8) % 2 ? 16 : 0;
+    for (let x = off; x < W; x += 32) R(g, x, y, 1, 8, '#a86d3a');
+  }
+
+  // 동그란 창문 (밖은 우주)
+  const { x: wx, y: wy, r } = WIN;
+  for (let y = -r - 3; y <= r + 3; y++) {
+    for (let x = -r - 3; x <= r + 3; x++) {
+      const d = Math.sqrt(x * x + y * y);
+      if (d <= r) R(g, wx + x, wy + y, 1, 1, '#0d0a26');
+      else if (d <= r + 1) R(g, wx + x, wy + y, 1, 1, '#5c6178');
+      else if (d <= r + 3.4) R(g, wx + x, wy + y, 1, 1, '#9aa0b8');
+    }
+  }
+  // 창문 나사
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    R(g, wx + Math.cos(a) * (r + 2), wy + Math.sin(a) * (r + 2), 1, 1, '#e4e8f6');
+  }
+  // 우주 구름 (성운)
+  [[36, 34, '#2a1d5c'], [56, 54, '#24194f'], [40, 56, '#2e2266']].forEach(([cx, cy, col]) => {
+    for (let i = 0; i < 40; i++) {
+      const x = cx + Math.round((Math.random() - 0.5) * 14);
+      const y = cy + Math.round((Math.random() - 0.5) * 10);
+      if ((x - wx) ** 2 + (y - wy) ** 2 < (r - 1) ** 2) R(g, x, y, 1, 1, col);
+    }
+  });
+  // 행성
+  const P = PLANET;
+  for (let y = -P.r; y <= P.r; y++)
+    for (let x = -P.r; x <= P.r; x++)
+      if (x * x + y * y <= P.r * P.r)
+        R(g, P.x + x, P.y + y, 1, 1, x + y > 3 ? '#e0773a' : '#ff9f5a');
+  for (let x = -10; x <= 10; x++) {
+    const y = Math.round(-x * 0.3);
+    const inFront = y >= 0 || Math.abs(x) > P.r;
+    if (inFront) R(g, P.x + x, P.y + y + 1, 1, 1, '#ffd9a0');
+  }
+  // 작은 달
+  for (let y = -3; y <= 3; y++)
+    for (let x = -3; x <= 3; x++)
+      if (x * x + y * y <= 9) R(g, 34 + x, 54 + y, 1, 1, x + y > 1 ? '#a9aec6' : '#dfe3f2');
+
+  // 반짝이는 별 위치 정하기 (행성/달 위는 피하기)
+  while (stars.length < 26) {
+    const x = wx + Math.round((Math.random() - 0.5) * 2 * (r - 2));
+    const y = wy + Math.round((Math.random() - 0.5) * 2 * (r - 2));
+    if ((x - wx) ** 2 + (y - wy) ** 2 > (r - 2) ** 2) continue;
+    if ((x - P.x) ** 2 + (y - P.y) ** 2 < 120) continue;
+    if ((x - 34) ** 2 + (y - 54) ** 2 < 25) continue;
+    stars.push({ x, y, speed: 1 + Math.random() * 2, phase: Math.random() * 6 });
+  }
+
+  // 액자 (생선 그림)
+  R(g, 111, 17, 2, 2, '#555');
+  R(g, 98, 20, 28, 22, '#7a4a24');
+  R(g, 100, 22, 24, 18, '#bde3ff');
+  R(g, 100, 35, 24, 5, '#8fd0ff');
+  drawSprite(g, FISH, 107, 27);
+
+  // 선반 + 화분 + 로켓 장난감
+  R(g, 136, 46, 44, 3, '#8a5a34');
+  R(g, 136, 49, 44, 1, '#5e3a1e');
+  R(g, 140, 49, 2, 5, '#5e3a1e');
+  R(g, 174, 49, 2, 5, '#5e3a1e');
+  R(g, 145, 32, 2, 8, '#3f9d4a');
+  R(g, 141, 34, 4, 2, '#5cc46a');
+  R(g, 147, 33, 4, 2, '#5cc46a');
+  R(g, 144, 30, 2, 2, '#5cc46a');
+  R(g, 141, 39, 10, 2, '#d9774c');
+  R(g, 142, 41, 8, 5, '#c0603a');
+  R(g, 164, 33, 5, 13, '#e8e8f0');
+  R(g, 165, 31, 3, 2, '#ff5c5c');
+  R(g, 166, 30, 1, 1, '#ff5c5c');
+  R(g, 165, 36, 3, 3, '#7ec8ff');
+  R(g, 162, 41, 2, 5, '#ff5c5c');
+  R(g, 169, 41, 2, 5, '#ff5c5c');
+
+  // 동그란 러그
+  for (let y = -11; y <= 11; y++) {
+    for (let x = -52; x <= 52; x++) {
+      const d = (x / 52) ** 2 + (y / 11) ** 2;
+      if (d > 1) continue;
+      let col = '#9b7fe0';
+      if (d > 0.8) col = '#7a5fc6';
+      else if (d > 0.45 && d < 0.52) col = '#b9a3ff';
+      R(g, 96 + x, 124 + y, 1, 1, col);
+    }
+  }
+
+  // 밥그릇
+  R(g, 29, 115, 18, 2, '#ff8fa8');
+  R(g, 30, 117, 16, 5, '#ff6b8b');
+  R(g, 32, 122, 12, 1, '#c94a68');
+  R(g, 36, 118, 4, 2, '#ffe066');
+
+  // 큰 화분
+  R(g, 172, 80, 3, 26, '#3f9d4a');
+  R(g, 162, 88, 10, 4, '#5cc46a');
+  R(g, 175, 84, 10, 4, '#5cc46a');
+  R(g, 164, 96, 8, 4, '#3f9d4a');
+  R(g, 175, 94, 9, 4, '#3f9d4a');
+  R(g, 169, 76, 8, 5, '#5cc46a');
+  R(g, 164, 106, 20, 4, '#d9774c');
+  R(g, 166, 110, 16, 12, '#c0603a');
+  R(g, 166, 118, 16, 4, '#a64f2e');
+
+  return c;
+}
+const background = makeBackground();
+
+// =====================================================
+//  4. 고양이 그리기
+// =====================================================
+function moodOf(h) {
+  if (h >= 80) return 'great';
+  if (h >= 60) return 'good';
+  if (h >= 40) return 'ok';
+  if (h >= 20) return 'hungry';
+  return 'sad';
+}
+
+function drawTail(g, cx, top, t) {
+  const pts = [[13, 14], [14, 13], [15, 12], [16, 11], [16, 10], [16, 9], [15, 8]];
+  const sway = Math.sin(t * 2.5);
+  const pos = pts.map(([x, y], i) => [cx + x + Math.round(sway * Math.max(0, i - 2) * 0.6), top + y]);
+  pos.forEach(([x, y]) => R(g, x - 1, y - 1, 3, 3, PAL.k));
+  pos.forEach(([x, y]) => R(g, x, y, 1, 1, PAL.d));
+}
+
+function drawFace(g, cx, top, t, o) {
+  const P = (x, y, c = PAL.k) => R(g, cx + x, top + y, 1, 1, c);
+  const mood = o.mood;
+
+  // 눈
+  if (o.eating || mood === 'great') {          // 웃는 눈 ^ ^
+    P(2, 6); P(3, 5); P(4, 6);
+    P(9, 6); P(10, 5); P(11, 6);
+  } else if (o.blink) {                        // 눈 깜빡
+    P(3, 6); P(4, 6); P(9, 6); P(10, 6);
+  } else {                                     // 동그란 눈
+    P(3, 5); P(4, 5); P(3, 6); P(4, 6);
+    P(9, 5); P(10, 5); P(9, 6); P(10, 6);
+    P(3, 5, '#fff'); P(9, 5, '#fff');
+  }
+
+  // 슬플 때 눈썹 + 눈물
+  if (mood === 'sad' && !o.eating) {
+    P(3, 4); P(4, 3); P(9, 3); P(10, 4);
+    P(3, 7 + (Math.floor(t * 2) % 2), PAL.b);
+  }
+
+  // 입
+  if (o.eating) {
+    if (o.chew) { P(6, 7); P(7, 7); P(6, 8, PAL.p); P(7, 8, PAL.p); }
+    else { P(6, 7); P(7, 7); }
+  } else if (mood === 'great' || mood === 'good') {
+    P(5, 7); P(6, 8); P(7, 8); P(8, 7);        // 웃는 입
+  } else if (mood === 'ok') {
+    P(6, 7); P(7, 7);                          // 그냥 입
+  } else {
+    P(5, 8); P(6, 7); P(7, 7); P(8, 8);        // 시무룩한 입
+  }
+}
+
+function drawCat(g, cx, floorY, t, o) {
+  const top = floorY - 17 - (o.bob || 0);
+  if (o.shadow) R(g, cx + 1, floorY - 1, 13, 2, 'rgba(43,32,64,0.3)');
+  drawTail(g, cx, top, t);
+  drawSprite(g, CAT, cx, top);
+  drawFace(g, cx, top, t, o);
+  return top;
+}
+
+// =====================================================
+//  5. 게임 상태
+// =====================================================
+const game = {
+  started: false,
+  happy: 50,       // 행복도
+  fish: 0,         // 생선 개수
+  fishTimer: 0,    // 다음 생선까지 지난 시간
+  hungerTimer: 0,  // 마지막으로 밥 먹은 뒤 지난 시간
+  fedCount: 0,
+  playTime: 0,
+  score: 0,        // 점수
+  poopTimer: 0,    // 다음 똥까지 지난 시간
+  paused: false,   // 일시정지 중인지
+  lastScore: 0,    // 바로 전 점수 (식스-세븐 확인용)
+};
+const POOP_TIME = 30;      // 똥 싸는 시간(초)
+const POOP_PENALTY = 3;    // 똥 1개당 1초에 깎이는 점수
+const poops = [];          // 바닥에 있는 똥들
+
+const cat = {
+  x: 88, targetX: 88,
+  state: 'idle',   // idle(쉬기), walk(걷기), eat(먹기)
+  idleTime: 2,
+  eatTime: 0,
+  heartsDone: false,
+  blinkTimer: 3, blink: 0,
+  bubbleTimer: 4,
+  heartTimer: 5,
+};
+
+const hearts = [];
+let shootingStar = null;
+
+// =====================================================
+//  6. 화면 위 글자 (말풍선, +10)
+// =====================================================
+const screenEl = document.getElementById('screen');
+const bubbleEl = document.getElementById('bubble');
+let bubbleLeft = 0;
+
+function say(text, seconds = 2.8) {
+  bubbleEl.textContent = text;
+  bubbleEl.hidden = false;
+  bubbleLeft = seconds;
+}
+
+function floatText(text, color, x = cat.x + 7, y = FLOOR - 34) {
+  const el = document.createElement('div');
+  el.className = 'float';
+  el.textContent = text;
+  el.style.color = color;
+  el.style.left = (x / W * 100) + '%';
+  el.style.top = (y / H * 100) + '%';
+  screenEl.appendChild(el);
+  setTimeout(() => el.remove(), 1300);
+}
+
+const LINES = {
+  great: ['골골골~ ♡', '우주 최고로 행복해옹!', '같이 있어서 좋아옹'],
+  good: ['냐옹~', '오늘 별이 예쁘다옹', '생선 맛있었어옹'],
+  ok: ['냐아..', '심심하다옹'],
+  hungry: ['배고파옹…', '생선 줄 수 있어옹?'],
+  sad: ['너무 배고파옹 ㅠㅠ', '생선… 생선…'],
+};
+// 고양이를 클릭했을 때 하는 말
+const CLICK_LINES = {
+  great: ['쓰다듬어줘서 고마워옹 ♡', '너가 제일 좋아옹!', '골골골골~', '우주에서 제일 행복한 고양이다옹!'],
+  good: ['헤헤, 간지러워옹', '같이 놀자옹!', '냐옹~ 기분 좋다옹'],
+  ok: ['응? 불렀어옹?', '그냥 그렇다옹…', '조금 심심하다옹'],
+  hungry: ['쓰다듬는 것보다 생선이 좋아옹…', '배에서 꼬르륵 소리 난다옹', '생선 있어옹?'],
+  sad: ['힘이 없다옹… ㅠㅠ', '생선… 제발…', '너무 배고파서 눈물 난다옹'],
+};
+
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const rand = (a, b) => a + Math.random() * (b - a);
+
+// =====================================================
+//  7. 생선 주기
+// =====================================================
+function feed() {
+  if (!game.started || game.paused || game.fish <= 0 || cat.state === 'eat') return;
+
+  game.fish--;
+  const before = game.happy;
+  game.happy = Math.min(100, game.happy + 10);
+  game.fedCount++;
+  game.hungerTimer = 0;
+
+  cat.state = 'eat';
+  cat.eatTime = 0;
+  cat.heartsDone = false;
+
+  floatText(game.happy > before ? '+10 💗' : 'MAX!', '#ff7eb3');
+  say('냠냠!', 1.8);
+}
+
+// =====================================================
+//  8. 매 순간 바뀌는 것들 (시간 계산)
+// =====================================================
+function updateTimers(dt) {
+  if (!game.started) return;
+  game.playTime += dt;
+
+  // 10초마다 생선 +1 (최대 6개)
+  if (game.fish < MAX_FISH) {
+    game.fishTimer += dt;
+    while (game.fishTimer >= FISH_TIME && game.fish < MAX_FISH) {
+      game.fishTimer -= FISH_TIME;
+      game.fish++;
+      popSlot(game.fish - 1);
+    }
+  }
+  if (game.fish >= MAX_FISH) game.fishTimer = 0;
+
+  // 30초마다 똥 싸기
+  game.poopTimer += dt;
+  while (game.poopTimer >= POOP_TIME) {
+    game.poopTimer -= POOP_TIME;
+    makePoop();
+  }
+
+  // 점수: 1초에 (행복도 ÷ 10)점 오르고, 똥 1개당 3점씩 깎여요 (0점 밑으로는 안 내려가요)
+  const gain = game.happy / 10;
+  const loss = poops.length * POOP_PENALTY;
+  game.score = Math.max(0, game.score + (gain - loss) * dt);
+
+  // 1분 동안 밥을 안 주면 행복도 -10
+  game.hungerTimer += dt;
+  while (game.hungerTimer >= HUNGER_TIME) {
+    game.hungerTimer -= HUNGER_TIME;
+    if (game.happy > 0) {
+      game.happy = Math.max(0, game.happy - 10);
+      floatText('-10', '#7ec8ff');
+    }
+  }
+}
+
+function updateCat(dt, t) {
+  const mood = moodOf(game.happy);
+
+  if (cat.jump > 0) cat.jump -= dt;
+
+  // 눈 깜빡이기
+  cat.blinkTimer -= dt;
+  if (cat.blinkTimer <= 0) { cat.blink = 0.15; cat.blinkTimer = rand(2, 5); }
+  cat.blink -= dt;
+
+  if (cat.state === 'eat') {
+    cat.eatTime += dt;
+    if (cat.eatTime > 0.6 && !cat.heartsDone) {
+      cat.heartsDone = true;
+      for (let i = 0; i < 4; i++) addHeart(i * 0.15);
+    }
+    if (cat.eatTime > 2) { cat.state = 'idle'; cat.idleTime = rand(1, 3); }
+  } else if (cat.state === 'idle') {
+    cat.idleTime -= dt;
+    if (cat.idleTime <= 0) {
+      const walkChance = game.happy >= 40 ? 0.6 : 0.3;   // 배고프면 덜 움직여요
+      if (Math.random() < walkChance) {
+        cat.targetX = Math.round(rand(56, 136));
+        cat.state = 'walk';
+      } else {
+        cat.idleTime = rand(2, 5);
+      }
+    }
+  } else if (cat.state === 'walk') {
+    const step = 16 * dt;
+    if (Math.abs(cat.targetX - cat.x) <= step) {
+      cat.x = cat.targetX;
+      cat.state = 'idle';
+      cat.idleTime = rand(2, 5);
+    } else {
+      cat.x += Math.sign(cat.targetX - cat.x) * step;
+    }
+  }
+
+  if (!game.started) return;
+
+  // 가끔 혼잣말하기
+  cat.bubbleTimer -= dt;
+  if (cat.bubbleTimer <= 0 && cat.state !== 'eat') {
+    say(pick(LINES[mood]));
+    cat.bubbleTimer = rand(7, 12);
+  }
+
+  // 아주 행복하면 가끔 하트가 뿅
+  if (mood === 'great') {
+    cat.heartTimer -= dt;
+    if (cat.heartTimer <= 0) { addHeart(0); cat.heartTimer = rand(4, 7); }
+  }
+
+  // 말풍선 시간 줄이기
+  if (bubbleLeft > 0) {
+    bubbleLeft -= dt;
+    if (bubbleLeft <= 0) bubbleEl.hidden = true;
+  }
+}
+
+// 고양이 꼬리 쪽 바닥에 똥 놓기
+function makePoop() {
+  let x = Math.round(cat.x) + 16;
+  if (x > 154) x = Math.round(cat.x) - 10;    // 화분과 겹치지 않게
+  x = Math.max(50, Math.min(154, x + Math.round(rand(-2, 2))));
+  poops.push({ x, y: FLOOR - 7 });
+  say('끙차… 미안하다옹', 2);
+}
+
+// 고양이 클릭하면 대사 + 살짝 점프
+function petCat() {
+  say(pick(CLICK_LINES[moodOf(game.happy)]), 2.5);
+  cat.bubbleTimer = rand(7, 12);
+  if (cat.state !== 'eat') cat.jump = 0.3;
+  if (moodOf(game.happy) === 'great') addHeart(0);
+}
+
+// 점수가 ...67 (67, 167, 267 …)이 되면 "식스-세븐!"
+function checkSixSeven() {
+  const now = Math.floor(game.score);
+  if (now === game.lastScore) return;
+  game.lastScore = now;
+  if (now % 100 === 67) {
+    say('식스-세븐!', 2.5);
+    cat.bubbleTimer = rand(7, 12);
+    if (cat.state !== 'eat') cat.jump = 0.3;
+    floatText('6️⃣7️⃣', '#ffe066');
+  }
+}
+
+function addHeart(delay) {
+  hearts.push({ x: cat.x + 4 + rand(-4, 4), y: FLOOR - 22, vx: rand(-6, 6), life: 1.6, delay });
+}
+
+function updateEffects(dt) {
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const h = hearts[i];
+    if (h.delay > 0) { h.delay -= dt; continue; }
+    h.x += h.vx * dt;
+    h.y -= 14 * dt;
+    h.life -= dt;
+    if (h.life <= 0) hearts.splice(i, 1);
+  }
+
+  // 창문 밖 별똥별
+  if (!shootingStar && Math.random() < dt * 0.12) {
+    shootingStar = { x: WIN.x + rand(5, 20), y: WIN.y - rand(15, 22), life: 0.9 };
+  }
+  if (shootingStar) {
+    shootingStar.x -= 40 * dt;
+    shootingStar.y += 22 * dt;
+    shootingStar.life -= dt;
+    if (shootingStar.life <= 0) shootingStar = null;
+  }
+}
+
+// =====================================================
+//  9. 화면 그리기
+// =====================================================
+function drawSpace(t) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(WIN.x + 0.5, WIN.y + 0.5, WIN.r, 0, Math.PI * 2);
+  ctx.clip();
+
+  stars.forEach(s => {
+    const b = (Math.sin(t * s.speed + s.phase) + 1) / 2;
+    if (b < 0.25) return;
+    R(ctx, s.x, s.y, 1, 1, b > 0.75 ? '#ffffff' : '#8f96e8');
+    if (b > 0.95) {
+      R(ctx, s.x - 1, s.y, 1, 1, '#8f96e8'); R(ctx, s.x + 1, s.y, 1, 1, '#8f96e8');
+      R(ctx, s.x, s.y - 1, 1, 1, '#8f96e8'); R(ctx, s.x, s.y + 1, 1, 1, '#8f96e8');
+    }
+  });
+
+  if (shootingStar) {
+    const s = shootingStar;
+    R(ctx, s.x, s.y, 1, 1, '#ffffff');
+    for (let i = 1; i <= 4; i++) R(ctx, s.x + i * 2, s.y - i, 1, 1, i < 3 ? '#ffe9a0' : '#8f96e8');
+  }
+  ctx.restore();
+}
+
+function render(t) {
+  ctx.drawImage(background, 0, 0);
+  drawSpace(t);
+
+  // 똥 (냄새 김이 살랑살랑)
+  poops.forEach((p, i) => {
+    drawSprite(ctx, POOP, p.x, p.y, POOP_PAL);
+    const wave = Math.floor(t * 3 + i) % 2;
+    R(ctx, p.x + 2 + wave, p.y - 4, 1, 2, '#9ccf6a');
+    R(ctx, p.x + 5 - wave, p.y - 6, 1, 2, '#9ccf6a');
+  });
+
+  const mood = moodOf(game.happy);
+  const eating = cat.state === 'eat';
+  let bob = cat.state === 'walk' ? Math.floor(t * 8) % 2 : 0;
+  if (cat.jump > 0) bob = Math.round(Math.sin((0.3 - cat.jump) / 0.3 * Math.PI) * 5);
+  const top = drawCat(ctx, Math.round(cat.x), FLOOR, t, {
+    mood,
+    eating,
+    chew: eating && cat.eatTime > 0.6 && Math.floor(cat.eatTime * 6) % 2 === 0,
+    blink: cat.blink > 0,
+    bob,
+    shadow: true,
+  });
+  cat.top = top;   // 클릭 판정에 사용
+
+  // 떨어지는 생선
+  if (eating && cat.eatTime < 0.6) {
+    const p = cat.eatTime / 0.6;
+    drawSprite(ctx, FISH, Math.round(cat.x) + 2, Math.round(top - 22 + p * 27));
+  }
+
+  // 하트
+  hearts.forEach(h => {
+    if (h.delay > 0) return;
+    if (h.life < 0.4 && Math.floor(h.life * 20) % 2) return;  // 사라질 때 깜빡깜빡
+    drawSprite(ctx, HEART, Math.round(h.x), Math.round(h.y));
+  });
+
+  // 말풍선 위치를 고양이 머리 위로
+  if (!bubbleEl.hidden) {
+    bubbleEl.style.left = ((cat.x + 7) / W * 100) + '%';
+    bubbleEl.style.top = ((top - 3) / H * 100) + '%';
+  }
+}
+
+// =====================================================
+//  10. 오른쪽 스코어보드
+// =====================================================
+const $ = id => document.getElementById(id);
+const happyBar = $('happyBar');
+const slotsEl = $('slots');
+const feedBtn = $('feedBtn');
+
+for (let i = 0; i < 10; i++) {
+  const seg = document.createElement('div');
+  seg.className = 'seg';
+  happyBar.appendChild(seg);
+}
+
+const GRAY = { k: '#4a3f73', b: '#3a305e' };
+const slotCanvases = [];
+for (let i = 0; i < MAX_FISH; i++) {
+  const c = document.createElement('canvas');
+  c.width = 9; c.height = 5;
+  slotsEl.appendChild(c);
+  slotCanvases.push(c);
+}
+
+function popSlot(i) {
+  const c = slotCanvases[i];
+  if (!c) return;
+  c.classList.remove('pop');
+  void c.offsetWidth;          // 애니메이션 다시 시작하는 요령
+  c.classList.add('pop');
+}
+
+const MOOD_TEXT = {
+  great: ['😻 최고로 행복해요!', '#ff7eb3'],
+  good: ['😺 기분이 좋아요', '#ffb3d1'],
+  ok: ['🐱 그럭저럭이에요', '#ffe066'],
+  hungry: ['😿 조금 배고파요…', '#ffa36b'],
+  sad: ['🙀 너무 배고파요 ㅠㅠ', '#7ec8ff'],
+};
+
+let lastFishDrawn = -1;
+function updateBoard() {
+  const h = game.happy;
+  const mood = moodOf(h);
+
+  $('happyNum').textContent = `${h} / 100`;
+  happyBar.style.setProperty('--barColor', MOOD_TEXT[mood][1]);
+  [...happyBar.children].forEach((seg, i) => seg.classList.toggle('on', i < h / 10));
+  $('mood').textContent = MOOD_TEXT[mood][0];
+  $('mood').style.color = MOOD_TEXT[mood][1];
+  $('hungerInfo').textContent = h > 0
+    ? `행복도 -10 까지 ${Math.ceil(HUNGER_TIME - game.hungerTimer)}초`
+    : '행복도가 바닥이에요. 생선을 주세요!';
+
+  $('fishNum').textContent = `${game.fish} / ${MAX_FISH}`;
+  if (lastFishDrawn !== game.fish) {
+    lastFishDrawn = game.fish;
+    slotCanvases.forEach((c, i) => {
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 9, 5);
+      drawSprite(g, FISH, 0, 0, i < game.fish ? PAL : GRAY);
+    });
+  }
+  const full = game.fish >= MAX_FISH;
+  $('fishProg').style.width = full ? '100%' : (game.fishTimer / FISH_TIME * 100) + '%';
+  $('fishInfo').textContent = full
+    ? '생선이 가득 찼어요!'
+    : `다음 생선까지 ${Math.ceil(FISH_TIME - game.fishTimer)}초`;
+
+  $('score').textContent = Math.floor(game.score).toLocaleString();
+  const gain = game.happy / 10;
+  const loss = poops.length * POOP_PENALTY;
+  $('scoreRate').innerHTML =
+    `<span style="color:#9cf0a0">+${gain}/초</span>` +
+    (loss ? ` <span style="color:#ff8a8a">-${loss}/초 (똥 ${poops.length}개)</span>` : '');
+  $('poopInfo').textContent = `💩 다음 똥까지 ${Math.ceil(POOP_TIME - game.poopTimer)}초`;
+
+  feedBtn.disabled = !game.started || game.paused || game.fish <= 0 || cat.state === 'eat';
+  $('fedCount').textContent = game.fedCount;
+  const sec = Math.floor(game.playTime);
+  $('playTime').textContent =
+    String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+}
+
+// =====================================================
+//  11. 시작 화면
+// =====================================================
+const startCtx = $('startCat').getContext('2d');
+function drawStartCat(t) {
+  startCtx.clearRect(0, 0, 24, 22);
+  drawCat(startCtx, 2, 20, t, { mood: 'great' });
+}
+
+$('startBtn').addEventListener('click', () => {
+  $('startScreen').hidden = true;
+  game.started = true;
+  $('pauseBtn').disabled = false;
+  say('안녕! 반가워옹~', 3);
+});
+feedBtn.addEventListener('click', feed);
+
+// 일시정지 / 계속하기
+$('pauseBtn').addEventListener('click', () => {
+  game.paused = !game.paused;
+  $('pauseBtn').textContent = game.paused ? '▶ 계속하기' : '⏸ 일시정지';
+  $('pauseCover').hidden = !game.paused;
+});
+
+// =====================================================
+//  게임 화면 클릭 (똥 치우기 / 고양이 쓰다듬기)
+// =====================================================
+// 마우스 위치를 게임 화면의 도트 위치로 바꾸기
+function toGamePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width * W,
+    y: (e.clientY - rect.top) / rect.height * H,
+  };
+}
+function poopAt(x, y) {
+  return poops.findIndex(p => x >= p.x - 2 && x <= p.x + 10 && y >= p.y - 6 && y <= p.y + 9);
+}
+function isOnCat(x, y) {
+  return x >= cat.x && x <= cat.x + 17 && y >= cat.top && y <= cat.top + 17;
+}
+
+canvas.addEventListener('click', e => {
+  if (!game.started || game.paused) return;
+  const { x, y } = toGamePos(e);
+  const i = poopAt(x, y);
+  if (i >= 0) {                       // 똥 치우기가 먼저!
+    const p = poops[i];
+    poops.splice(i, 1);
+    floatText('✨ 깨끗!', '#ffe066', p.x + 4, p.y - 8);
+    say('오늘 거던바를 드셨나요?', 2.5);
+    cat.bubbleTimer = rand(7, 12);
+    return;
+  }
+  if (isOnCat(x, y)) petCat();
+});
+
+// 클릭할 수 있는 곳 위에서는 손가락 모양 커서
+canvas.addEventListener('mousemove', e => {
+  const { x, y } = toGamePos(e);
+  canvas.style.cursor = game.started && !game.paused && (poopAt(x, y) >= 0 || isOnCat(x, y)) ? 'pointer' : 'default';
+});
+
+// =====================================================
+//  12. 게임 반복 (1초에 약 60번 실행)
+// =====================================================
+let lastTime = performance.now();
+let animTime = 0;                    // 일시정지하면 멈추는 시계
+function loop(now) {
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+  const small = Math.min(dt, 0.1);   // 움직임은 한 번에 너무 많이 안 가게
+
+  if (!game.paused) {                // 일시정지 중이면 모두 멈춤
+    animTime += small;
+    updateTimers(dt);                // 시간 계산은 실제 시간 그대로
+    checkSixSeven();
+    updateCat(small, animTime);
+    updateEffects(small);
+  }
+  render(animTime);
+  updateBoard();
+  if (!game.started) drawStartCat(now / 1000);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
