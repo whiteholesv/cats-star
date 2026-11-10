@@ -45,6 +45,7 @@
     display: block;
     width: 100%;
     image-rendering: pixelated;   /* 도트가 흐려지지 않게 */
+    touch-action: none;           /* 휴대폰에서도 고양이를 끌 수 있게 */
   }
 
   /* 오른쪽 스코어보드 */
@@ -291,6 +292,7 @@
       <li>⭐ 1초마다 행복도 10당 1점씩 올라요</li>
       <li>💩 똥이 있으면 1초에 개당 3점씩 깎여요 (클릭해서 치우기!)</li>
       <li>🐱 고양이를 클릭하면 말을 걸어요</li>
+      <li>🖱️ 고양이를 마우스로 끌면 옮길 수 있어요</li>
     </ul>
     <button class="btn" id="startBtn">게임 시작</button>
   </div>
@@ -612,6 +614,8 @@ const poops = [];          // 바닥에 있는 똥들
 
 const cat = {
   x: 88, targetX: 88,
+  y: FLOOR,        // 고양이 발이 닿는 높이 (끌어서 바꿀 수 있어요)
+  dragging: false, // 마우스로 옮기는 중인지
   state: 'idle',   // idle(쉬기), walk(걷기), eat(먹기)
   idleTime: 2,
   eatTime: 0,
@@ -637,7 +641,7 @@ function say(text, seconds = 2.8) {
   bubbleLeft = seconds;
 }
 
-function floatText(text, color, x = cat.x + 7, y = FLOOR - 34) {
+function floatText(text, color, x = cat.x + 7, y = cat.y - 34) {
   const el = document.createElement('div');
   el.className = 'float';
   el.textContent = text;
@@ -745,6 +749,8 @@ function updateCat(dt, t) {
       for (let i = 0; i < 4; i++) addHeart(i * 0.15);
     }
     if (cat.eatTime > 2) { cat.state = 'idle'; cat.idleTime = rand(1, 3); }
+  } else if (cat.dragging) {
+    // 마우스로 옮기는 동안에는 혼자 걷지 않아요
   } else if (cat.state === 'idle') {
     cat.idleTime -= dt;
     if (cat.idleTime <= 0) {
@@ -789,12 +795,23 @@ function updateCat(dt, t) {
   }
 }
 
-// 고양이 꼬리 쪽 바닥에 똥 놓기
+// 이 자리에 똥을 놓아도 되는지 확인 (다른 똥, 밥그릇, 고양이와 겹치면 안 돼요)
+function isPoopSpotFree(x, y) {
+  const hitsPoop = poops.some(p => Math.abs(p.x - x) < 12 && Math.abs(p.y - y) < 12);
+  const hitsBowl = x + 8 > 27 && x < 49 && y + 7 > 113 && y < 125;
+  const hitsCat = x + 8 > cat.x && x < cat.x + 18 && y + 7 > cat.y - 17 && y < cat.y;
+  return !hitsPoop && !hitsBowl && !hitsCat;
+}
+
+// 바닥의 빈자리 중 아무 곳에나 똥 놓기
 function makePoop() {
-  let x = Math.round(cat.x) + 16;
-  if (x > 154) x = Math.round(cat.x) - 10;    // 화분과 겹치지 않게
-  x = Math.max(50, Math.min(154, x + Math.round(rand(-2, 2))));
-  poops.push({ x, y: FLOOR - 7 });
+  let x, y;
+  for (let i = 0; i < 100; i++) {
+    x = Math.round(rand(4, 155));     // 오른쪽 화분 앞까지
+    y = Math.round(rand(110, 136));   // 바닥 안쪽
+    if (isPoopSpotFree(x, y)) break;
+  }
+  poops.push({ x, y });
   say('끙차… 미안하다옹', 2);
 }
 
@@ -820,7 +837,7 @@ function checkSixSeven() {
 }
 
 function addHeart(delay) {
-  hearts.push({ x: cat.x + 4 + rand(-4, 4), y: FLOOR - 22, vx: rand(-6, 6), life: 1.6, delay });
+  hearts.push({ x: cat.x + 4 + rand(-4, 4), y: cat.y - 22, vx: rand(-6, 6), life: 1.6, delay });
 }
 
 function updateEffects(dt) {
@@ -877,18 +894,21 @@ function render(t) {
   drawSpace(t);
 
   // 똥 (냄새 김이 살랑살랑)
-  poops.forEach((p, i) => {
+  const drawPoop = (p, i) => {
     drawSprite(ctx, POOP, p.x, p.y, POOP_PAL);
     const wave = Math.floor(t * 3 + i) % 2;
     R(ctx, p.x + 2 + wave, p.y - 4, 1, 2, '#9ccf6a');
     R(ctx, p.x + 5 - wave, p.y - 6, 1, 2, '#9ccf6a');
-  });
+  };
+  // 고양이보다 뒤쪽에 있는 똥은 고양이보다 먼저 그려요
+  poops.forEach((p, i) => { if (p.y + 7 <= cat.y) drawPoop(p, i); });
 
   const mood = moodOf(game.happy);
   const eating = cat.state === 'eat';
   let bob = cat.state === 'walk' ? Math.floor(t * 8) % 2 : 0;
   if (cat.jump > 0) bob = Math.round(Math.sin((0.3 - cat.jump) / 0.3 * Math.PI) * 5);
-  const top = drawCat(ctx, Math.round(cat.x), FLOOR, t, {
+  if (cat.dragging) bob = 4;         // 들어 올린 것처럼 살짝 위로
+  const top = drawCat(ctx, Math.round(cat.x), cat.y, t, {
     mood,
     eating,
     chew: eating && cat.eatTime > 0.6 && Math.floor(cat.eatTime * 6) % 2 === 0,
@@ -897,6 +917,9 @@ function render(t) {
     shadow: true,
   });
   cat.top = top;   // 클릭 판정에 사용
+
+  // 고양이보다 앞쪽에 있는 똥은 고양이 다음에 그려요
+  poops.forEach((p, i) => { if (p.y + 7 > cat.y) drawPoop(p, i); });
 
   // 떨어지는 생선
   if (eating && cat.eatTime < 0.6) {
@@ -1043,7 +1066,31 @@ function isOnCat(x, y) {
   return x >= cat.x && x <= cat.x + 17 && y >= cat.top && y <= cat.top + 17;
 }
 
+// 고양이 끌어서 옮기기
+let grab = null;           // 고양이를 잡은 위치
+let justDragged = false;   // 방금 옮겼다면 클릭으로 치지 않기
+
+canvas.addEventListener('pointerdown', e => {
+  justDragged = false;
+  if (!game.started || game.paused) return;
+  const { x, y } = toGamePos(e);
+  if (!isOnCat(x, y)) return;
+  grab = { startX: x, startY: y, offsetX: x - cat.x, offsetY: y - cat.y };
+  canvas.setPointerCapture(e.pointerId);   // 화면 밖으로 나가도 계속 따라오게
+});
+
+function endDrag() {
+  grab = null;
+  if (!cat.dragging) return;
+  cat.dragging = false;
+  justDragged = true;
+  cat.idleTime = rand(2, 5);
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
 canvas.addEventListener('click', e => {
+  if (justDragged) { justDragged = false; return; }
   if (!game.started || game.paused) return;
   const { x, y } = toGamePos(e);
   const i = poopAt(x, y);
@@ -1059,9 +1106,30 @@ canvas.addEventListener('click', e => {
 });
 
 // 클릭할 수 있는 곳 위에서는 손가락 모양 커서
-canvas.addEventListener('mousemove', e => {
+canvas.addEventListener('pointermove', e => {
   const { x, y } = toGamePos(e);
-  canvas.style.cursor = game.started && !game.paused && (poopAt(x, y) >= 0 || isOnCat(x, y)) ? 'pointer' : 'default';
+
+  if (grab) {
+    // 조금이라도 움직여야 "옮기기"로 쳐요 (제자리에서 누르면 클릭)
+    if (!cat.dragging && Math.hypot(x - grab.startX, y - grab.startY) > 1.5) {
+      cat.dragging = true;
+      if (cat.state === 'walk') cat.state = 'idle';
+    }
+    if (cat.dragging) {
+      // 집 바닥 안에서만 움직여요
+      cat.x = Math.max(2, Math.min(171, x - grab.offsetX));
+      cat.y = Math.max(110, Math.min(142, Math.round(y - grab.offsetY)));
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
+  }
+
+  let cursor = 'default';
+  if (game.started && !game.paused) {
+    if (poopAt(x, y) >= 0) cursor = 'pointer';
+    else if (isOnCat(x, y)) cursor = 'grab';
+  }
+  canvas.style.cursor = cursor;
 });
 
 // =====================================================
